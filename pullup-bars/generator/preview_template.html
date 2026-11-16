@@ -1,0 +1,481 @@
+<title>Ragdoll Pull-Up Bars</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=Barlow:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: one-screen gym showroom. 3D stage fills the screen, tier rack along the bottom,
+   spec card floats top-left. Single dark look on purpose: neon needs a dark room. */
+:root {
+  --night: #0d1018;
+  --panel: rgba(12, 15, 24, 0.78);
+  --line: rgba(160, 180, 220, 0.18);
+  --ink: #eef2fa;
+  --ink-dim: #9aa4b8;
+  --tier: #3fd8ff;
+  --display: "Chakra Petch", "Arial Narrow", system-ui, sans-serif;
+  --body: "Barlow", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+html, body { height: 100%; }
+body {
+  background: var(--night);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 15px;
+  overflow: hidden;
+}
+#stage { position: fixed; inset: 0; }
+#stage canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+.hud {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + 14px);
+  left: max(16px, env(safe-area-inset-left, 0px));
+  right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  pointer-events: none;
+}
+.card {
+  pointer-events: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px 16px;
+  max-width: 340px;
+  min-width: 0;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+h1 {
+  font-family: var(--display);
+  font-weight: 700;
+  font-size: 30px;
+  line-height: 1.05;
+  margin: 4px 0 6px;
+  color: var(--tier);
+  text-shadow: 0 0 18px color-mix(in srgb, var(--tier) 55%, transparent);
+  text-wrap: balance;
+}
+.blurb { margin: 0 0 10px; line-height: 1.45; color: var(--ink); }
+.specs { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; margin: 0; font-size: 13px; }
+.specs dt { color: var(--ink-dim); }
+.specs dd { margin: 0; font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+.controls { display: flex; flex-direction: column; gap: 6px; pointer-events: auto; }
+.toggle {
+  font: 600 13px var(--body);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  text-align: left;
+}
+.toggle[aria-pressed="true"] { border-color: var(--tier); box-shadow: inset 0 0 0 1px var(--tier); }
+.toggle:focus-visible, .tier:focus-visible { outline: 2px solid var(--tier); outline-offset: 2px; }
+
+.rack {
+  position: fixed;
+  left: 0; right: 0;
+  bottom: 0;
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 14px);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.rack::-webkit-scrollbar { display: none; }
+.tier {
+  flex: 1 0 auto;
+  min-width: 92px;
+  font-family: var(--body);
+  color: var(--ink);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 8px 10px 9px;
+  cursor: pointer;
+  text-align: left;
+  display: grid;
+  gap: 2px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+.tier:hover { transform: translateY(-2px); }
+.tier .num { font-family: var(--mono); font-size: 10px; letter-spacing: 0.1em; color: var(--ink-dim); }
+.tier .nm { font-family: var(--display); font-weight: 600; font-size: 15px; white-space: nowrap; }
+.tier .sw { height: 3px; border-radius: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.tier[aria-pressed="true"] { border-color: var(--c); box-shadow: inset 0 0 0 1px var(--c); }
+
+.hint {
+  position: fixed;
+  right: max(16px, env(safe-area-inset-right, 0px));
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 82px);
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-dim);
+  pointer-events: none;
+}
+#err { position: fixed; inset: auto 16px 50% 16px; text-align: center; color: var(--ink-dim); }
+
+@media (max-width: 640px) {
+  .hud { flex-direction: column; }
+  .card { max-width: none; width: 100%; padding: 10px 12px; }
+  h1 { font-size: 22px; }
+  .blurb { font-size: 13px; margin-bottom: 6px; }
+  .specs { display: none; }
+  .controls { flex-direction: row; }
+  .hint { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tier { transition: none; }
+}
+</style>
+
+<div id="stage" aria-label="3D view of the selected pull-up bar"></div>
+
+<div class="hud">
+  <section class="card" aria-live="polite">
+    <div class="eyebrow" id="eyebrow">Throw a Ragdoll · Tier 1</div>
+    <h1 id="name">Basic</h1>
+    <p class="blurb" id="blurb"></p>
+    <dl class="specs">
+      <dt>Roblox model</dt><dd id="model-name"></dd>
+      <dt>Parts</dt><dd id="parts"></dd>
+      <dt>Grip bar</dt><dd>9.2 studs high</dd>
+      <dt>Footprint</dt><dd>11 × 7 studs</dd>
+    </dl>
+  </section>
+  <div class="controls">
+    <button class="toggle" id="spin" type="button" aria-pressed="true">Auto-rotate</button>
+    <button class="toggle" id="dummy" type="button" aria-pressed="true">Show ragdoll</button>
+  </div>
+</div>
+
+<div class="hint">Drag to orbit · scroll or pinch to zoom</div>
+<nav class="rack" id="rack" aria-label="Pull-up bar tiers"></nav>
+<p id="err" hidden></p>
+
+<script type="importmap">
+{ "imports": {
+  "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+  "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+} }
+</script>
+<script id="models" type="application/json">/*__MODELS__*/</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+import { EffectComposer } from "three/addons/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/addons/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/addons/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/addons/postprocessing/OutputPass.js";
+
+const MODELS = JSON.parse(document.getElementById("models").textContent);
+const BLURBS = {
+  "Basic": "Dark steel posts, cyan neon strips, glowing foot caps and a pixel-screen console, like the starter treadmill.",
+  "Inferno": "Red frame with a lava floor, flame chevrons, side wheels and burning horn tips.",
+  "Celestial": "White marble and gold, the star sigil in a gold oval, angel wings, clouds and floating halos.",
+  "Void": "Obsidian with purple veins, a galaxy-swirl portal, orbit rings, floating shards and a glowing rubble skirt.",
+  "Frostbite": "Frost-cracked stone, ice spikes, hanging chains and a horned skull with glowing eyes.",
+  "Stormcastle": "Castle towers with gold spires, a lightning-bolt crest and a storm orb with sun rays.",
+  "Arcane": "Magenta runes, an X-sigil tower, a crown with white flame and two peacock fans.",
+  "Blood Moon": "A cratered red moon ringed with spikes, gothic spires, chains, bones and skulls.",
+  "Toxic": "Emerald gothic spires with floating gems, an X-sigil crest, chains and rising toxic bubbles.",
+};
+const ACCENT = {};
+
+const stage = document.getElementById("stage");
+const renderer = new THREE.WebGLRenderer({ antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.05;
+stage.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 500);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 8.5, 0);
+controls.enableDamping = true;
+controls.minDistance = 12;
+controls.maxDistance = 70;
+controls.maxPolarAngle = Math.PI * 0.49;
+controls.autoRotate = true;
+controls.autoRotateSpeed = 1.1;
+
+const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x30343c, 1.4);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xffffff, 1.6);
+sun.position.set(-18, 30, -14);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+Object.assign(sun.shadow.camera, { left: -16, right: 16, top: 22, bottom: -6, near: 1, far: 80 });
+sun.shadow.bias = -0.0008;
+scene.add(sun);
+
+// Studded grey baseplate, like the video's showroom floor
+function studTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  g.fillStyle = "#5d6168"; g.fillRect(0, 0, 64, 64);
+  g.fillStyle = "#4b4f56";
+  g.beginPath(); g.ellipse(32, 34, 9, 5, 0, 0, Math.PI * 2); g.fill();
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(100, 100);
+  t.anisotropy = 8;
+  t.colorSpace = THREE.SRGBColorSpace;
+  return t;
+}
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
+  new THREE.MeshStandardMaterial({ map: studTexture(), roughness: 0.95 }));
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloom = new UnrealBloomPass(new THREE.Vector2(1, 1), 0.55, 0.45, 0.9);
+composer.addPass(bloom);
+composer.addPass(new OutputPass());
+
+// Shared unit geometries; each part scales them via its matrix
+const GEO = [
+  new THREE.BoxGeometry(1, 1, 1),
+  new THREE.SphereGeometry(0.5, 20, 14),
+  new THREE.CylinderGeometry(0.5, 0.5, 1, 20).rotateZ(-Math.PI / 2),
+];
+const matCache = new Map();
+function material(hex, mat, transp) {
+  const key = hex + mat + transp;
+  if (matCache.has(key)) return matCache.get(key);
+  const col = new THREE.Color(hex);
+  let m;
+  if (mat === "Neon") {
+    m = new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(1.5), toneMapped: false });
+  } else {
+    const p = { color: col, roughness: 0.8, metalness: 0 };
+    if (mat === "Metal" || mat === "DiamondPlate") Object.assign(p, { roughness: 0.5, metalness: 0.2 });
+    if (mat === "Foil") Object.assign(p, { roughness: 0.35, metalness: 0.45, emissive: col.clone().multiplyScalar(0.18) });
+    if (mat === "Marble") Object.assign(p, { roughness: 0.5 });
+    if (mat === "Fabric") Object.assign(p, { roughness: 1 });
+    if (mat === "Slate") Object.assign(p, { roughness: 0.95 });
+    if (mat === "Ice" || mat === "Glass") Object.assign(p, { roughness: 0.15, metalness: 0.1, transparent: true,
+      opacity: Math.max(0.55, 1 - transp - 0.2), emissive: col.clone().multiplyScalar(0.25) });
+    m = new THREE.MeshStandardMaterial(p);
+  }
+  if (transp > 0 && mat !== "Ice" && mat !== "Glass") { m.transparent = true; m.opacity = 1 - transp; }
+  matCache.set(key, m);
+  return m;
+}
+
+function spriteTexture() {
+  const c = document.createElement("canvas");
+  c.width = c.height = 64;
+  const g = c.getContext("2d");
+  const gr = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+  gr.addColorStop(0, "rgba(255,255,255,1)");
+  gr.addColorStop(0.35, "rgba(255,255,255,0.6)");
+  gr.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = gr; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
+const SPRITE = spriteTexture();
+
+function buildModel(m) {
+  const group = new THREE.Group();
+  const M = new THREE.Matrix4(), S = new THREE.Matrix4();
+  for (const [shape, p, r, s, hex, mat, tr] of m.parts) {
+    if (tr >= 1) continue; // invisible FX holders
+    const mesh = new THREE.Mesh(GEO[shape], material(hex, mat, tr));
+    M.set(r[0], r[1], r[2], p[0], r[3], r[4], r[5], p[1], r[6], r[7], r[8], p[2], 0, 0, 0, 1);
+    S.makeScale(s[0], s[1], s[2]);
+    mesh.matrixAutoUpdate = false;
+    mesh.matrix.multiplyMatrices(M, S);
+    mesh.castShadow = mat !== "Neon";
+    mesh.receiveShadow = mat !== "Neon";
+    group.add(mesh);
+  }
+  // particles: lightweight stand-ins for the Roblox ParticleEmitters
+  const systems = [];
+  for (const e of m.emitters) {
+    const n = Math.min(160, Math.round(e.rate * ((e.life[0] + e.life[1]) / 2) * 1.5) + 6);
+    const pos = new Float32Array(n * 3), col = new Float32Array(n * 3);
+    const c0 = new THREE.Color(e.colors[0]), c1 = new THREE.Color(e.colors[1]);
+    const ages = new Float32Array(n), lives = new Float32Array(n), vel = new Float32Array(n * 3);
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(pos, 3));
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    const size = e.kind === "fire" ? 0.9 : 0.35;
+    const pts = new THREE.Points(geo, new THREE.PointsMaterial({ size, map: SPRITE, vertexColors: true,
+      transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, toneMapped: false }));
+    const sys = { e, n, pos, col, ages, lives, vel, c0, c1, geo };
+    for (let i = 0; i < n; i++) { respawn(sys, i); sys.ages[i] = Math.random() * sys.lives[i]; }
+    systems.push(sys);
+    group.add(pts);
+  }
+  group.userData.systems = systems;
+  return group;
+}
+function respawn(s, i) {
+  const e = s.e;
+  s.pos[i * 3] = e.pos[0] + (Math.random() - 0.5) * e.size[0];
+  s.pos[i * 3 + 1] = e.pos[1] + (Math.random() - 0.5) * e.size[1];
+  s.pos[i * 3 + 2] = e.pos[2] + (Math.random() - 0.5) * e.size[2];
+  const sp = e.speed[0] + Math.random() * (e.speed[1] - e.speed[0]);
+  const dir = new THREE.Vector3(Math.random() - 0.5, e.kind === "fire" ? 1.5 : Math.random() - 0.2, Math.random() - 0.5).normalize();
+  s.vel[i * 3] = dir.x * sp; s.vel[i * 3 + 1] = dir.y * sp; s.vel[i * 3 + 2] = dir.z * sp;
+  s.ages[i] = 0;
+  s.lives[i] = e.life[0] + Math.random() * (e.life[1] - e.life[0]);
+}
+function stepParticles(group, dt) {
+  for (const s of group.userData.systems) {
+    const a = s.e.accel;
+    for (let i = 0; i < s.n; i++) {
+      s.ages[i] += dt;
+      if (s.ages[i] > s.lives[i]) respawn(s, i);
+      s.vel[i * 3] += a[0] * dt; s.vel[i * 3 + 1] += a[1] * dt; s.vel[i * 3 + 2] += a[2] * dt;
+      s.pos[i * 3] += s.vel[i * 3] * dt; s.pos[i * 3 + 1] += s.vel[i * 3 + 1] * dt; s.pos[i * 3 + 2] += s.vel[i * 3 + 2] * dt;
+      const t = s.ages[i] / s.lives[i], fade = Math.max(0, 1 - t) * 1.6;
+      const c = s.c0.clone().lerp(s.c1, t);
+      s.col[i * 3] = c.r * fade; s.col[i * 3 + 1] = c.g * fade; s.col[i * 3 + 2] = c.b * fade;
+    }
+    s.geo.attributes.position.needsUpdate = true;
+    s.geo.attributes.color.needsUpdate = true;
+  }
+}
+
+// Blocky stand-in character hanging from the grip bar, for scale
+function buildDummy() {
+  const g = new THREE.Group();
+  const skin = new THREE.MeshStandardMaterial({ color: 0xf2c38b, roughness: 0.7 });
+  const shirt = new THREE.MeshStandardMaterial({ color: 0x3a6fd8, roughness: 0.7 });
+  const pants = new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.8 });
+  const add = (mat, x, y, z, sx, sy, sz, rz = 0) => {
+    const m = new THREE.Mesh(GEO[0], mat);
+    m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.z = rz;
+    m.castShadow = true; g.add(m);
+  };
+  const z = -1.6;
+  add(skin, 0, 7.55, z, 1.15, 1.15, 1.15);
+  add(shirt, 0, 6.0, z, 2.0, 2.0, 1.0);
+  add(shirt, -1.25, 7.9, z, 0.85, 2.5, 0.85, -0.08);
+  add(shirt, 1.25, 7.9, z, 0.85, 2.5, 0.85, 0.08);
+  add(skin, -1.3, 9.25, z, 0.7, 0.55, 0.7);
+  add(skin, 1.3, 9.25, z, 0.7, 0.55, 0.7);
+  add(pants, -0.5, 4.0, z, 0.95, 2.0, 0.95);
+  add(pants, 0.5, 4.0, z, 0.95, 2.0, 0.95);
+  return g;
+}
+const dummy = buildDummy();
+scene.add(dummy);
+
+// Tier rack
+const rack = document.getElementById("rack");
+const built = new Map();
+let current = null, currentIdx = 0;
+MODELS.forEach((m, idx) => {
+  const neon = m.parts.filter(p => p[5] === "Neon").map(p => p[4]);
+  const counts = {};
+  neon.forEach(h => counts[h] = (counts[h] || 0) + 1);
+  ACCENT[m.name] = Object.entries(counts).sort((a, b) => b[1] - a[1])[0][0];
+  const b = document.createElement("button");
+  b.className = "tier";
+  b.type = "button";
+  b.id = "tier-" + m.tier;
+  b.style.setProperty("--c", ACCENT[m.name]);
+  b.innerHTML = `<span class="num">TIER ${m.tier}</span><span class="nm">${m.name}</span><span class="sw"></span>`;
+  b.addEventListener("click", () => show(idx));
+  rack.appendChild(b);
+});
+
+function show(idx) {
+  const m = MODELS[idx];
+  currentIdx = idx;
+  if (current) scene.remove(current);
+  if (!built.has(idx)) built.set(idx, buildModel(m));
+  current = built.get(idx);
+  scene.add(current);
+  const sky = new THREE.Color(m.sky);
+  scene.background = sky;
+  scene.fog = new THREE.Fog(sky, 45, 120);
+  hemi.color.copy(sky).lerp(new THREE.Color(0xffffff), 0.55);
+  document.documentElement.style.setProperty("--tier", ACCENT[m.name]);
+  document.getElementById("eyebrow").textContent = `Throw a Ragdoll · Tier ${m.tier}`;
+  document.getElementById("name").textContent = m.name;
+  document.getElementById("blurb").textContent = BLURBS[m.name] || "";
+  document.getElementById("model-name").textContent = `PullUpBar_T${m.tier}_${m.name.replace(/\s/g, "")}`;
+  document.getElementById("parts").textContent = m.parts.length.toLocaleString();
+  rack.querySelectorAll(".tier").forEach((el, i) => el.setAttribute("aria-pressed", String(i === idx)));
+  try { localStorage.setItem("pullup-tier", String(idx)); } catch (_) {}
+  if (location.hash !== "#tier-" + m.tier) history.replaceState(null, "", "#tier-" + m.tier);
+}
+
+function toggle(btn, fn) {
+  btn.addEventListener("click", () => {
+    const on = btn.getAttribute("aria-pressed") !== "true";
+    btn.setAttribute("aria-pressed", String(on));
+    fn(on);
+  });
+}
+const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const spinBtn = document.getElementById("spin");
+if (reduce) { controls.autoRotate = false; spinBtn.setAttribute("aria-pressed", "false"); }
+toggle(spinBtn, on => controls.autoRotate = on);
+toggle(document.getElementById("dummy"), on => dummy.visible = on);
+
+function resize() {
+  const w = stage.clientWidth, h = stage.clientHeight;
+  renderer.setSize(w, h, false);
+  composer.setSize(w, h);
+  bloom.setSize(w, h);
+  camera.aspect = w / h;
+  const narrow = w < 640;
+  camera.fov = narrow ? 52 : 40;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener("resize", resize);
+resize();
+const narrow = stage.clientWidth < 640;
+camera.position.set(-20, 15, -30).multiplyScalar(narrow ? 1.3 : 1);
+
+function startIdx() {
+  const h = /^#tier-(\d)$/.exec(location.hash);
+  if (h) return Math.max(0, Math.min(MODELS.length - 1, Number(h[1]) - 1));
+  try { const v = Number(localStorage.getItem("pullup-tier")); if (v >= 0 && v < MODELS.length) return v; } catch (_) {}
+  return 0;
+}
+show(startIdx());
+window.addEventListener("hashchange", () => { const i = startIdx(); if (i !== currentIdx) show(i); });
+window.__showTier = show;
+window.__view = (x, y, z, d) => { camera.position.set(x, y, z); controls.autoRotate = false; dummy.visible = d; controls.update(); };
+
+const clock = new THREE.Clock();
+function frame() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  controls.update();
+  if (current && !reduce) stepParticles(current, dt);
+  composer.render();
+  requestAnimationFrame(frame);
+}
+frame();
+</script>

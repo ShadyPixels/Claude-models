@@ -6,6 +6,7 @@ Outputs (relative to pullup-bars/):
     roblox/PullUpBars.rbxmx           all nine tiers in one Folder
     roblox/models/<name>.rbxmx        one model per tier
     roblox/luau/Build_<name>.lua      command-bar build script per tier
+    roblox/PullUpAnimation_*.rbxmx    the pull-up animation scripts, one file per service
     preview/index.html                3D web preview (open in a browser)
 """
 import json
@@ -15,7 +16,8 @@ import sys
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 
-from emit import model_name, preview_model, write_luau, write_rbxmx  # noqa: E402
+from emit import (model_name, preview_model, write_luau, write_rbxmx,  # noqa: E402
+                  write_script_bundle)
 from themes import TIERS  # noqa: E402
 
 ROOT = os.path.dirname(HERE)
@@ -40,9 +42,35 @@ def main():
         write_rbxmx(os.path.join(ROOT, "roblox", "models", mn + ".rbxmx"), [(t, n, p)])
         write_luau(os.path.join(ROOT, "roblox", "luau", "Build_" + mn + ".lua"), t, n, p)
 
+    scripts = os.path.join(ROOT, "roblox", "scripts")
+
+    def src(*parts):
+        with open(os.path.join(scripts, *parts), encoding="utf-8") as fh:
+            return fh.read()
+
+    write_script_bundle(
+        os.path.join(ROOT, "roblox", "PullUpAnimation_ReplicatedStorage.rbxmx"),
+        [("ModuleScript", "Config", src("ReplicatedStorage", "PullUp", "Config.lua")),
+         ("ModuleScript", "PullUpRig", src("ReplicatedStorage", "PullUp", "PullUpRig.lua")),
+         ("ModuleScript", "PullUpMotion", src("ReplicatedStorage", "PullUp", "PullUpMotion.lua"))],
+        folder="PullUp")
+    write_script_bundle(
+        os.path.join(ROOT, "roblox", "PullUpAnimation_ServerScriptService.rbxmx"),
+        [("Script", "PullUpServer", src("ServerScriptService", "PullUpServer.server.lua"))])
+    write_script_bundle(
+        os.path.join(ROOT, "roblox", "PullUpAnimation_StarterPlayerScripts.rbxmx"),
+        [("LocalScript", "PullUpClient", src("StarterPlayerScripts", "PullUpClient.client.lua"))])
+
+    # the preview plays frames exported by tests/sim.luau (the real Luau code)
+    anim_path = os.path.join(ROOT, "preview", "animation.json")
+    anim = "null"
+    if os.path.exists(anim_path):
+        with open(anim_path, encoding="utf-8") as fh:
+            anim = fh.read().strip()
+
     data = json.dumps([preview_model(t, n, s, p) for t, n, s, p in built], separators=(",", ":"))
     with open(os.path.join(HERE, "preview_template.html"), encoding="utf-8") as fh:
-        html = fh.read().replace("/*__MODELS__*/", data)
+        html = fh.read().replace("/*__MODELS__*/", data).replace("/*__ANIMATION__*/", anim)
     with open(os.path.join(ROOT, "preview", "index.html"), "w", encoding="utf-8") as fh:
         fh.write(html)
 

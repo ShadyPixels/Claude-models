@@ -84,6 +84,18 @@ h1 {
   cursor: pointer;
   text-align: left;
 }
+.phase {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: var(--tier);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .toggle[aria-pressed="true"] { border-color: var(--tier); box-shadow: inset 0 0 0 1px var(--tier); }
 .toggle:focus-visible, .tier:focus-visible { outline: 2px solid var(--tier); outline-offset: 2px; }
 
@@ -158,13 +170,14 @@ h1 {
     <dl class="specs">
       <dt>Roblox model</dt><dd id="model-name"></dd>
       <dt>Parts</dt><dd id="parts"></dd>
-      <dt>Grip bar</dt><dd>9.2 studs high</dd>
+      <dt>Grip bar</dt><dd>9.2 studs high · grips ±2</dd>
       <dt>Footprint</dt><dd>11 × 7 studs</dd>
     </dl>
   </section>
   <div class="controls">
     <button class="toggle" id="spin" type="button" aria-pressed="true">Auto-rotate</button>
-    <button class="toggle" id="dummy" type="button" aria-pressed="true">Show ragdoll</button>
+    <button class="toggle" id="dummy" type="button" aria-pressed="true">Show pull-ups</button>
+    <div class="phase" id="phase" aria-live="off">Jump and grab</div>
   </div>
 </div>
 
@@ -179,6 +192,7 @@ h1 {
 } }
 </script>
 <script id="models" type="application/json">/*__MODELS__*/</script>
+<script id="animation" type="application/json">/*__ANIMATION__*/</script>
 <script type="module">
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
@@ -364,30 +378,66 @@ function stepParticles(group, dt) {
   }
 }
 
-// Blocky stand-in character hanging from the grip bar, for scale
-function buildDummy() {
-  const g = new THREE.Group();
-  const skin = new THREE.MeshStandardMaterial({ color: 0xf2c38b, roughness: 0.7 });
-  const shirt = new THREE.MeshStandardMaterial({ color: 0x3a6fd8, roughness: 0.7 });
-  const pants = new THREE.MeshStandardMaterial({ color: 0x2b2f3a, roughness: 0.8 });
-  const add = (mat, x, y, z, sx, sy, sz, rz = 0) => {
-    const m = new THREE.Mesh(GEO[0], mat);
-    m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.rotation.z = rz;
-    m.castShadow = true; g.add(m);
-  };
-  const z = -1.6;
-  add(skin, 0, 7.55, z, 1.15, 1.15, 1.15);
-  add(shirt, 0, 6.0, z, 2.0, 2.0, 1.0);
-  add(shirt, -1.25, 7.9, z, 0.85, 2.5, 0.85, -0.08);
-  add(shirt, 1.25, 7.9, z, 0.85, 2.5, 0.85, 0.08);
-  add(skin, -1.3, 9.25, z, 0.7, 0.55, 0.7);
-  add(skin, 1.3, 9.25, z, 0.7, 0.55, 0.7);
-  add(pants, -0.5, 4.0, z, 0.95, 2.0, 0.95);
-  add(pants, 0.5, 4.0, z, 0.95, 2.0, 0.95);
-  return g;
+// R15 ragdoll doing the pull-up animation. The frames were exported from the
+// real Luau animation code (tests/sim.luau), so this is what plays in Roblox.
+const ANIM = JSON.parse(document.getElementById("animation").textContent);
+const PART_MAT = {
+  Head: 0xf2c38b, LeftHand: 0xf2c38b, RightHand: 0xf2c38b,
+  UpperTorso: 0x3a6fd8, LowerTorso: 0x2b4fa8,
+  LeftUpperArm: 0x3a6fd8, RightUpperArm: 0x3a6fd8, LeftLowerArm: 0xf2c38b, RightLowerArm: 0xf2c38b,
+  LeftUpperLeg: 0x2b2f3a, RightUpperLeg: 0x2b2f3a, LeftLowerLeg: 0x2b2f3a, RightLowerLeg: 0x2b2f3a,
+  LeftFoot: 0x15161a, RightFoot: 0x15161a,
+};
+const dummy = new THREE.Group();
+const dummyParts = [];
+let animFrames = [];
+if (ANIM) {
+  ANIM.names.forEach((name, i) => {
+    if (name === "HumanoidRootPart") { dummyParts.push(null); return; }
+    const m = new THREE.Mesh(GEO[0], new THREE.MeshStandardMaterial({ color: PART_MAT[name] ?? 0x888888, roughness: 0.7 }));
+    m.scale.set(...ANIM.sizes[i]);
+    m.castShadow = true;
+    dummy.add(m);
+    dummyParts.push(m);
+  });
+  // pre-decompose every frame into position + quaternion for smooth interpolation
+  const M = new THREE.Matrix4();
+  animFrames = ANIM.frames.map(f => ANIM.names.map((_, i) => {
+    const c = f.slice(i * 12, i * 12 + 12);
+    M.set(c[3], c[4], c[5], c[0], c[6], c[7], c[8], c[1], c[9], c[10], c[11], c[2], 0, 0, 0, 1);
+    const p = new THREE.Vector3(), q = new THREE.Quaternion(), s = new THREE.Vector3();
+    M.decompose(p, q, s);
+    return { p, q };
+  }));
 }
-const dummy = buildDummy();
 scene.add(dummy);
+const phaseEl = document.getElementById("phase");
+function phaseLabel(t) {
+  if (t < ANIM.mount) return "Jump and grab";
+  if (t < ANIM.dismount) {
+    const k = (t - ANIM.mount) / ANIM.tempo;
+    const p = k % 1;
+    const n = Math.floor(k) + 1;
+    return `Rep ${n} · ${p < 0.36 ? "pull" : p < 0.48 ? "squeeze" : p < 0.86 ? "lower" : "settle"}`;
+  }
+  if (t < ANIM.dismount + 0.75) return "Let go and land";
+  return "Standing";
+}
+let animTime = 0;
+function stepDummy(dt) {
+  if (!animFrames.length) return;
+  const dur = animFrames.length / ANIM.fps;
+  animTime = (animTime + dt) % dur;
+  const fi = animTime * ANIM.fps;
+  const a = Math.floor(fi) % animFrames.length, b = (a + 1) % animFrames.length, k = fi - Math.floor(fi);
+  const A = animFrames[a], B = animFrames[b];
+  dummyParts.forEach((m, i) => {
+    if (!m) return;
+    m.position.lerpVectors(A[i].p, B[i].p, k);
+    m.quaternion.slerpQuaternions(A[i].q, B[i].q, k);
+  });
+  if (phaseEl) phaseEl.textContent = phaseLabel(animTime);
+}
 
 // Tier rack
 const rack = document.getElementById("rack");
@@ -468,12 +518,15 @@ show(startIdx());
 window.addEventListener("hashchange", () => { const i = startIdx(); if (i !== currentIdx) show(i); });
 window.__showTier = show;
 window.__view = (x, y, z, d) => { camera.position.set(x, y, z); controls.autoRotate = false; dummy.visible = d; controls.update(); };
+window.__animAt = t => { animTime = t; stepDummy(0); };
+if (reduce && ANIM) { animTime = ANIM.mount + ANIM.tempo * 0.42; stepDummy(0); }
 
 const clock = new THREE.Clock();
 function frame() {
   const dt = Math.min(clock.getDelta(), 0.05);
   controls.update();
   if (current && !reduce) stepParticles(current, dt);
+  if (dummy.visible) stepDummy(reduce ? 0 : dt);
   composer.render();
   requestAnimationFrame(frame);
 }

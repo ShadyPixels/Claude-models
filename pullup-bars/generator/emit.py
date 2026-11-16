@@ -391,3 +391,26 @@ def preview_model(tier, name, sky, parts):
                  "life": p["emitter"]["lifetime"], "kind": p["emitter"]["texture"]}
                 for p in parts if p.get("emitter")]
     return {"tier": tier, "name": name, "sky": sky, "parts": out, "emitters": emitters}
+
+
+# --------------------------------------------------------------------------
+# Script bundles (the pull-up animation system)
+# --------------------------------------------------------------------------
+
+def _script_item(ref, cls, name, source):
+    assert "]]>" not in source
+    return ("<Item class=\"%s\" referent=\"%s\"><Properties>"
+            "<string name=\"Name\">%s</string>"
+            "<ProtectedString name=\"Source\"><![CDATA[%s]]></ProtectedString>"
+            "</Properties></Item>" % (cls, ref(), escape(name), source))
+
+
+def write_script_bundle(path, items, folder=None):
+    """items: list of (class, name, source). Optionally wrapped in a Folder."""
+    ref = Ref()
+    body = "".join(_script_item(ref, c, n, src) for c, n, src in items)
+    if folder:
+        body = ("<Item class=\"Folder\" referent=\"%s\"><Properties><string name=\"Name\">%s"
+                "</string></Properties>%s</Item>" % (ref(), folder, body))
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(HEADER + body + "</roblox>\n")

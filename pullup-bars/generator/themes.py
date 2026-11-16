@@ -21,7 +21,7 @@ HEADER_Y = 11.2       # header beam centre
 HEADER_TOP = 11.8
 BAR_Y = 9.2           # grip bar height
 BAR_Z = -1.6          # grip bar sits in front of the posts
-GRIP_X = 1.3          # hand positions (+/-)
+GRIP_X = 2.0          # hand positions (+/-), a wide overhand grip
 HANG_Y = BAR_Y - 4.0  # where the HumanoidRootPart should sit while hanging
 
 
@@ -106,7 +106,7 @@ def frame(b: Builder, t: dict):
         base = b.box("Base", (0, 0.3, 0), (11.0, 0.6, 7.0), t.get("base", dark),
                      t.get("base_mat", fmat), collide=True,
                      attachments=[("HangPoint", (0, HANG_Y, BAR_Z)),
-                                  ("StandPoint", (0, BASE_Y, BAR_Z)),
+                                  ("StandPoint", (0, BASE_Y + 0.12, BAR_Z)),
                                   ("EnterPoint", (0, BASE_Y, -4.6))])
         base["primary"] = True
         b.box("Mat", (0, BASE_Y + 0.06, -0.6), (6.4, 0.12, 5.0), t.get("mat", "#1b1d22"),
@@ -155,10 +155,10 @@ def frame(b: Builder, t: dict):
               attachments=[("GripLeft", (-GRIP_X, BAR_Y, BAR_Z)),
                            ("GripRight", (GRIP_X, BAR_Y, BAR_Z))])
         for sx in (-1, 1):
-            b.cyl("Grip", (sx * (GRIP_X + 0.2), BAR_Y, BAR_Z), 1.3, 0.58,
+            b.cyl("Grip", (sx * GRIP_X, BAR_Y, BAR_Z), 1.3, 0.58,
                   t.get("grip", "#15161a"), "Fabric")
-            b.cyl("GripRing", (sx * (GRIP_X + 0.95), BAR_Y, BAR_Z), 0.14, 0.66, glow, "Neon")
-            b.cyl("GripRing", (sx * (GRIP_X - 0.55), BAR_Y, BAR_Z), 0.14, 0.66, glow, "Neon")
+            b.cyl("GripRing", (sx * (GRIP_X + 0.75), BAR_Y, BAR_Z), 0.14, 0.66, glow, "Neon")
+            b.cyl("GripRing", (sx * (GRIP_X - 0.75), BAR_Y, BAR_Z), 0.14, 0.66, glow, "Neon")
 
 
 # --------------------------------------------------------------------------

@@ -22,6 +22,33 @@ return {
 
 	-- Show a small "reps / let go" label for the player on the bar
 	ShowHud = true,
+
+	-- Personal pull-up bars that upgrade in order: Basic -> Inferno -> Celestial -> Void
+	-- -> Frostbite -> Stormcastle -> Arcane -> Blood Moon -> Toxic.
+	Shop = {
+		Enabled = true,
+
+		-- leaderstats value used to pay for upgrades
+		Currency = "Cash",
+		-- Price to unlock each tier, in order. Tier 1 is the free starter bar.
+		Prices = { 0, 500, 2500, 10000, 40000, 150000, 500000, 2000000, 10000000 },
+
+		-- Saves each player's tier. Set to nil if your own data system saves it and
+		-- calls PullUpBarShop.SetTier(player, tier) when the player joins.
+		DataStoreName = "PullUpBarTier_v1",
+
+		-- Only the owner can use (and upgrade) their bar.
+		OwnerOnly = true,
+
+		-- Upgrade prompt on each player's bar
+		UpgradeKey = Enum.KeyCode.F,
+		UpgradeGamepadKey = Enum.KeyCode.ButtonY,
+
+		-- Where personal bars go: any parts tagged "PullUpBarSpot". If the place has
+		-- none, this many spots are created in a row in front of the SpawnLocation.
+		AutoSpots = 8,
+		SpotSpacing = 16,
+	},
 }
 ]]></ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX00000002"><Properties><string name="Name">PullUpRig</string><ProtectedString name="Source"><![CDATA[--!nonstrict
 --[[

@@ -1,6 +1,6 @@
 --!nonstrict
 --[[
-	PullUpServer
+	PullUpService
 
 	Puts a ProximityPrompt on every model tagged "PullUpBar" in Workspace.
 	When a player triggers it, the server anchors their HumanoidRootPart at the
@@ -10,7 +10,13 @@
 
 	The server also counts reps and fires ServerStorage.PullUpRep:
 		PullUpRep.Event:Connect(function(player, tier, repCount) ... end)
+
+	Bars with an OwnerUserId attribute (given out by PullUpBarShop) can only be
+	used by their owner when Config.Shop.OwnerOnly is on. Bars with a Locked
+	attribute (being swapped for an upgrade) can't be started.
 ]]
+
+local PullUpService = {}
 
 local CollectionService = game:GetService("CollectionService")
 local Players = game:GetService("Players")
@@ -124,7 +130,11 @@ local function stop(player)
 end
 
 local function start(player, bar)
-	if sessions[player] or occupant[bar] then
+	if sessions[player] or occupant[bar] or bar:GetAttribute("Locked") then
+		return
+	end
+	local owner = bar:GetAttribute("OwnerUserId")
+	if owner and owner ~= player.UserId and Config.Shop and Config.Shop.OwnerOnly then
 		return
 	end
 	local character = player.Character
@@ -226,16 +236,7 @@ local function tapRep(player)
 	state.session:SetAttribute("RepStart", startAt)
 end
 
-remote.OnServerEvent:Connect(function(player, action)
-	if action == "Leave" then
-		stop(player)
-	elseif action == "Rep" then
-		tapRep(player)
-	end
-end)
-
--- rep counting
-RunService.Heartbeat:Connect(function()
+local function onHeartbeat()
 	local t = now()
 	for player, state in sessions do
 		if state.dismountStart then
@@ -253,9 +254,7 @@ RunService.Heartbeat:Connect(function()
 			end
 		end
 	end
-end)
-
-Players.PlayerRemoving:Connect(cleanup)
+end
 
 ---------------------------------------------------------------------------
 -- bars
@@ -274,7 +273,9 @@ local function setupBar(bar)
 	local prompt = Instance.new("ProximityPrompt")
 	prompt.Name = "PullUpPrompt"
 	prompt.ActionText = "Pull-ups"
-	prompt.ObjectText = bar:GetAttribute("TierName") or "Pull-up bar"
+	local tierName = bar:GetAttribute("TierName") or "Pull-up bar"
+	local ownerName = bar:GetAttribute("OwnerName")
+	prompt.ObjectText = ownerName and ("%s's %s"):format(ownerName, tierName) or tierName
 	prompt.KeyboardKeyCode = Config.PromptKey
 	prompt.GamepadKeyCode = Config.PromptGamepadKey
 	prompt.MaxActivationDistance = Config.PromptDistance
@@ -300,8 +301,61 @@ local function removeBar(bar)
 	end
 end
 
-CollectionService:GetInstanceAddedSignal(BAR_TAG):Connect(setupBar)
-CollectionService:GetInstanceRemovedSignal(BAR_TAG):Connect(removeBar)
-for _, bar in CollectionService:GetTagged(BAR_TAG) do
-	setupBar(bar)
+---------------------------------------------------------------------------
+-- API (used by PullUpBarShop, and by your own scripts if you like)
+---------------------------------------------------------------------------
+
+-- Starts pull-ups for a player on a bar (same checks as the prompt).
+PullUpService.Start = start
+
+-- Makes the player let go. They land DISMOUNT_TIME seconds later.
+PullUpService.Stop = stop
+
+-- The bar the player is on, or nil.
+function PullUpService.BarOf(player)
+	local state = sessions[player]
+	return state and state.bar
 end
+
+-- The player on a bar, or nil.
+function PullUpService.RiderOf(bar)
+	return occupant[bar]
+end
+
+-- Makes whoever is on the bar let go, and yields until they have landed.
+function PullUpService.ClearBar(bar)
+	local player = occupant[bar]
+	if not player then
+		return
+	end
+	stop(player)
+	local deadline = os.clock() + Motion.DISMOUNT_TIME + 1
+	while occupant[bar] == player and os.clock() < deadline do
+		task.wait()
+	end
+	cleanup(player)
+end
+
+local started = false
+function PullUpService.Init()
+	if started then
+		return
+	end
+	started = true
+	remote.OnServerEvent:Connect(function(player, action)
+		if action == "Leave" then
+			stop(player)
+		elseif action == "Rep" then
+			tapRep(player)
+		end
+	end)
+	RunService.Heartbeat:Connect(onHeartbeat)
+	Players.PlayerRemoving:Connect(cleanup)
+	CollectionService:GetInstanceAddedSignal(BAR_TAG):Connect(setupBar)
+	CollectionService:GetInstanceRemovedSignal(BAR_TAG):Connect(removeBar)
+	for _, bar in CollectionService:GetTagged(BAR_TAG) do
+		setupBar(bar)
+	end
+end
+
+return PullUpService

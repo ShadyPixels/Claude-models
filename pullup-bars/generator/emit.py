@@ -397,20 +397,26 @@ def preview_model(tier, name, sky, parts):
 # Script bundles (the pull-up animation system)
 # --------------------------------------------------------------------------
 
-def _script_item(ref, cls, name, source):
-    assert "]]>" not in source
-    return ("<Item class=\"%s\" referent=\"%s\"><Properties>"
-            "<string name=\"Name\">%s</string>"
-            "<ProtectedString name=\"Source\"><![CDATA[%s]]></ProtectedString>"
-            "</Properties></Item>" % (cls, ref(), escape(name), source))
+def node_xml(ref, node):
+    """node: {"cls", "name", "src"?, "disabled"?, "children"?} or {"xml": fn(ref)}."""
+    if "xml" in node:
+        return node["xml"](ref)
+    props = "<string name=\"Name\">%s</string>" % escape(node["name"])
+    if "src" in node:
+        assert "]]>" not in node["src"]
+        props += "<ProtectedString name=\"Source\"><![CDATA[%s]]></ProtectedString>" % node["src"]
+    if node.get("disabled"):
+        props += "<bool name=\"Disabled\">true</bool>"
+    kids = "".join(node_xml(ref, c) for c in node.get("children", []))
+    return "<Item class=\"%s\" referent=\"%s\"><Properties>%s</Properties>%s</Item>" % (
+        node["cls"], ref(), props, kids)
 
 
-def write_script_bundle(path, items, folder=None):
-    """items: list of (class, name, source). Optionally wrapped in a Folder."""
+def model_node(tier, name, parts):
+    return {"xml": lambda ref: model_xml(tier, name, parts, ref)}
+
+
+def write_tree(path, nodes):
     ref = Ref()
-    body = "".join(_script_item(ref, c, n, src) for c, n, src in items)
-    if folder:
-        body = ("<Item class=\"Folder\" referent=\"%s\"><Properties><string name=\"Name\">%s"
-                "</string></Properties>%s</Item>" % (ref(), folder, body))
     with open(path, "w", encoding="utf-8") as fh:
-        fh.write(HEADER + body + "</roblox>\n")
+        fh.write(HEADER + "".join(node_xml(ref, n) for n in nodes) + "</roblox>\n")

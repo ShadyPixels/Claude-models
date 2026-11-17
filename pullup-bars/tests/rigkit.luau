@@ -2,16 +2,25 @@
 local fs = require("@lune/fs")
 local roblox = require("@lune/roblox")
 local luau = require("@lune/luau")
+local task = require("@lune/task")
 local K = {}
 local SRC = "roblox/scripts/ReplicatedStorage/PullUp/"
 K.env = {
 	Instance = roblox.Instance, Vector3 = roblox.Vector3, Vector2 = roblox.Vector2, CFrame = roblox.CFrame,
-	Color3 = roblox.Color3, Enum = roblox.Enum, math = math, table = table, string = string,
+	Color3 = roblox.Color3, Enum = roblox.Enum, UDim2 = roblox.UDim2, UDim = roblox.UDim,
+	ColorSequence = roblox.ColorSequence, NumberSequence = roblox.NumberSequence,
+	NumberSequenceKeypoint = roblox.NumberSequenceKeypoint, NumberRange = roblox.NumberRange,
+	task = task, tonumber = tonumber, os = os, next = next, math = math, table = table, string = string,
 	setmetatable = setmetatable, ipairs = ipairs, pairs = pairs, type = type, typeof = typeof,
 	tostring = tostring, print = print, warn = print, error = error, pcall = pcall, assert = assert,
 }
-function K.load(name)
-	return luau.load(fs.readFile(SRC .. name .. ".lua"), { debugName = name, environment = K.env })()
+function K.load(name, path, extraEnv)
+	local env = K.env
+	if extraEnv then
+		env = table.clone(K.env)
+		for k, v in extraEnv do env[k] = v end
+	end
+	return luau.load(fs.readFile(path or (SRC .. name .. ".lua")), { debugName = name, environment = env })()
 end
 local V, CF = roblox.Vector3.new, roblox.CFrame.new
 -- synthetic R15 (block-like proportions, scale `sc`), HRP at `at`

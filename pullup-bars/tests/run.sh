@@ -9,3 +9,4 @@ for scale in 0.8 1 1.25; do
 done
 lune run tests/tap.luau
 lune run tests/bake.luau
+lune run tests/shop.luau

@@ -102,6 +102,90 @@ local function showHud(visible, reps)
 end
 
 ---------------------------------------------------------------------------
+-- shop: toasts and other players' prompts
+---------------------------------------------------------------------------
+
+local toastGui
+local function toast(kind, text)
+	if not toastGui then
+		toastGui = Instance.new("ScreenGui")
+		toastGui.Name = "PullUpToasts"
+		toastGui.ResetOnSpawn = false
+		local list = Instance.new("Frame")
+		list.Name = "List"
+		list.BackgroundTransparency = 1
+		list.AnchorPoint = Vector2.new(0.5, 0)
+		list.Position = UDim2.new(0.5, 0, 0, 70)
+		list.Size = UDim2.fromOffset(360, 200)
+		local layout = Instance.new("UIListLayout")
+		layout.Padding = UDim.new(0, 6)
+		layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+		layout.Parent = list
+		list.Parent = toastGui
+		toastGui.Parent = player:WaitForChild("PlayerGui")
+	end
+	local colors = {
+		success = Color3.fromRGB(80, 220, 140),
+		error = Color3.fromRGB(255, 110, 110),
+		info = Color3.fromRGB(120, 200, 255),
+	}
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromOffset(360, 44)
+	label.BackgroundColor3 = Color3.fromRGB(12, 15, 24)
+	label.BackgroundTransparency = 0.2
+	label.TextColor3 = colors[kind] or colors.info
+	label.Font = Enum.Font.GothamBold
+	label.TextSize = 20
+	label.Text = text
+	local corner = Instance.new("UICorner")
+	corner.CornerRadius = UDim.new(0, 10)
+	corner.Parent = label
+	label.Parent = toastGui.List
+	task.delay(2.6, function()
+		label:Destroy()
+	end)
+end
+
+task.spawn(function()
+	local noticeRemote = folder:WaitForChild("PullUpNotice", 30)
+	if noticeRemote then
+		noticeRemote.OnClientEvent:Connect(toast)
+	end
+end)
+
+-- Hide the prompts on bars that belong to someone else.
+local function guardPrompt(prompt, bar)
+	if not (Config.Shop and Config.Shop.OwnerOnly) then
+		return
+	end
+	local function check()
+		local owner = bar:GetAttribute("OwnerUserId")
+		if owner and owner ~= player.UserId and prompt.Enabled then
+			prompt.Enabled = false
+		end
+	end
+	prompt:GetPropertyChangedSignal("Enabled"):Connect(check)
+	check()
+end
+
+local function watchBar(bar)
+	for _, d in bar:GetDescendants() do
+		if d:IsA("ProximityPrompt") then
+			guardPrompt(d, bar)
+		end
+	end
+	bar.DescendantAdded:Connect(function(d)
+		if d:IsA("ProximityPrompt") then
+			guardPrompt(d, bar)
+		end
+	end)
+end
+CollectionService:GetInstanceAddedSignal("PullUpBar"):Connect(watchBar)
+for _, bar in CollectionService:GetTagged("PullUpBar") do
+	watchBar(bar)
+end
+
+---------------------------------------------------------------------------
 -- tracking
 ---------------------------------------------------------------------------
 

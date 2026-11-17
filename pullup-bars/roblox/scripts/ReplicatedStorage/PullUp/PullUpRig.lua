@@ -349,6 +349,24 @@ function PullUpRig:apply(T)
 	end
 end
 
+-- Shared IK helpers (used by the throw animation too)
+PullUpRig.basis = basis
+PullUpRig.solveChain = solveChain
+PullUpRig.placeBone = placeBone
+PullUpRig.unitOr = unitOr
+
+-- World CFrame of every body part for a set of transforms, with the
+-- HumanoidRootPart at hrpCF.
+function PullUpRig:fk(hrpCF, T)
+	local world = { HumanoidRootPart = hrpCF }
+	for _, j in PullUpRig.MOTORS do
+		local motor = self.motors[j.name]
+		local parent = world[motor.Part0.Name]
+		world[j.part] = parent * self.c0[j.name] * (T[j.name] or IDENTITY) * self.c1[j.name]:Inverse()
+	end
+	return world
+end
+
 function PullUpRig:reset()
 	for _, motor in self.motors do
 		motor.Transform = IDENTITY
